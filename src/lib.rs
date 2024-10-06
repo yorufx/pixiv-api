@@ -25,37 +25,29 @@ impl Debug for PixivApi {
 }
 
 impl PixivApi {
-    pub async fn new(refresh_token: impl PersistentToken + 'static, language: String) -> Self {
-        let headers = Self::default_headers(&language);
+    pub async fn new(oauth_token: impl OAuthToken + 'static, language: Option<String>) -> Self {
+        let headers = Self::default_headers(language.as_deref(), &oauth_token.access_token());
         let client = Client::builder().default_headers(headers).build().unwrap();
         let api = PixivApi {
             inner: {
                 Arc::new(RwLock::new(PixivApiInner {
-                    refresh_token: refresh_token.load().await,
-                    persistent_token: Box::new(refresh_token),
+                    oauth_token: Box::new(oauth_token),
                     client,
                     language,
                 }))
             },
         };
-        // Get access token from refresh token on start.
-        let expire_in = api.refresh_token().await.unwrap();
         // Keep refreshing token.
-        tokio::spawn(Self::keep_refresh_token(api.clone(), expire_in));
+        tokio::spawn(Self::keep_refresh_token(api.clone()));
         api
     }
 
-    pub async fn new_no_refresh(access_token: String, language: String) -> Self {
-        let mut headers = Self::default_headers(&language);
-        headers.insert(
-            "Authorization",
-            format!("Bearer {}", access_token).parse().unwrap(),
-        );
+    pub async fn new_no_refresh(access_token: String, language: Option<String>) -> Self {
+        let headers = Self::default_headers(language.as_deref(), &access_token);
         let client = Client::builder().default_headers(headers).build().unwrap();
         PixivApi {
             inner: Arc::new(RwLock::new(PixivApiInner {
-                refresh_token: "".to_string(),
-                persistent_token: Box::new(NoPersistentToken),
+                oauth_token: Box::new(NoRefreshToken { access_token }),
                 client,
                 language,
             })),
@@ -64,24 +56,39 @@ impl PixivApi {
 }
 
 #[async_trait]
-pub trait PersistentToken: Send + Sync {
-    async fn save(&self, refresh_token: String);
-    async fn load(&self) -> String;
+pub trait OAuthToken: Send + Sync {
+    fn access_token(&self) -> String;
+    fn refresh_token(&self) -> String;
+    /// Unix timestamp in seconds.
+    fn expires_at(&self) -> i64;
+    async fn refresh(&mut self, access_token: String, refresh_token: String, expires_at: i64);
 }
 
-struct NoPersistentToken;
+struct NoRefreshToken {
+    access_token: String,
+}
 
 #[async_trait]
-impl PersistentToken for NoPersistentToken {
-    async fn save(&self, _: String) {}
-    async fn load(&self) -> String {
+impl OAuthToken for NoRefreshToken {
+    fn access_token(&self) -> String {
+        self.access_token.clone()
+    }
+
+    fn refresh_token(&self) -> String {
+        unreachable!()
+    }
+
+    fn expires_at(&self) -> i64 {
+        0
+    }
+
+    async fn refresh(&mut self, _: String, _: String, _: i64) {
         unreachable!()
     }
 }
 
 struct PixivApiInner {
-    refresh_token: String,
-    persistent_token: Box<dyn PersistentToken>,
+    oauth_token: Box<dyn OAuthToken>,
     client: Client,
-    language: String,
+    language: Option<String>,
 }

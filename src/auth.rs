@@ -21,7 +21,7 @@ struct AuthTokenRequest {
 struct AuthTokenResponse {
     access_token: String,
     refresh_token: String,
-    expires_in: u64,
+    expires_in: i64,
 }
 
 impl AuthTokenRequest {
@@ -37,7 +37,7 @@ impl AuthTokenRequest {
 }
 
 impl PixivApi {
-    pub(crate) fn default_headers(language: &str) -> HeaderMap {
+    pub(crate) fn default_headers(language: Option<&str>, access_token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert("app-os", "ios".parse().unwrap());
         headers.insert("app-os-version", "14.6".parse().unwrap());
@@ -45,41 +45,58 @@ impl PixivApi {
             "user-agent",
             "PixivIOSApp/7.13.3 (iOS 14.6; iPhone13,2)".parse().unwrap(),
         );
-        headers.insert("accept-language", language.parse().unwrap());
+        headers.insert(
+            "Authorization",
+            format!("Bearer {}", access_token).parse().unwrap(),
+        );
+        if let Some(language) = language {
+            headers.insert("accept-language", language.parse().unwrap());
+        }
 
         headers
     }
 
-    pub(crate) async fn refresh_token(&self) -> Result<u64> {
+    pub(crate) async fn refresh_token(&self) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+
+        // Refresh access token.
         let mut inner = self.inner.write().await;
         let resp: AuthTokenResponse = inner
             .client
             .post(AUTH_TOKEN_URL)
-            .form(&AuthTokenRequest::new(inner.refresh_token.clone()))
+            .form(&AuthTokenRequest::new(inner.oauth_token.refresh_token()))
             .send()
             .await?
             .json()
             .await?;
 
-        let mut headers = Self::default_headers(&inner.language);
-        headers.insert(
-            "Authorization",
-            format!("Bearer {}", resp.access_token).parse().unwrap(),
-        );
-        inner
-            .persistent_token
-            .save(resp.refresh_token.clone())
-            .await;
-        inner.refresh_token = resp.refresh_token;
+        // Update client headers.
+        let headers = Self::default_headers(inner.language.as_deref(), &resp.access_token);
         inner.client = Client::builder().default_headers(headers).build().unwrap();
+        println!("Refreshed token: {:#?}", resp);
 
-        Ok(resp.expires_in)
+        // Save new tokens.
+        inner
+            .oauth_token
+            .refresh(
+                resp.access_token.clone(),
+                resp.refresh_token.clone(),
+                resp.expires_in + now,
+            )
+            .await;
+
+        Ok(())
     }
 
-    pub(crate) async fn keep_refresh_token(api: PixivApi, mut expire_in: u64) {
+    pub(crate) async fn keep_refresh_token(api: PixivApi) {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(expire_in - 10)).await;
-            expire_in = api.refresh_token().await.unwrap_or(10);
+            let expire_at = api.inner.read().await.oauth_token.expires_at();
+            let now = chrono::Utc::now().timestamp();
+            let expire_in = (expire_at - now - 60).max(0); // Refresh 1 minute before expire.
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(expire_in as u64)).await;
+
+            let _ = api.refresh_token().await;
         }
     }
 }
