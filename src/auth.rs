@@ -49,6 +49,7 @@ impl PixivApi {
             "Authorization",
             format!("Bearer {}", access_token).parse().unwrap(),
         );
+        headers.insert("Referer", "https://app-api.pixiv.net/".parse().unwrap());
         if let Some(language) = language {
             headers.insert("accept-language", language.parse().unwrap());
         }

@@ -37,6 +37,12 @@ impl PixivApi {
                 }))
             },
         };
+
+        // Refresh token if it's about to expire.
+        if api.inner.read().await.oauth_token.expires_at() + 60 <= chrono::Utc::now().timestamp() {
+            api.refresh_token().await.unwrap();
+        }
+
         // Keep refreshing token.
         tokio::spawn(Self::keep_refresh_token(api.clone()));
         api
@@ -52,6 +58,11 @@ impl PixivApi {
                 language,
             })),
         }
+    }
+
+    pub async fn download(&self, url: &str) -> Result<Vec<u8>> {
+        let resp = self.inner.read().await.client.get(url).send().await?;
+        Ok(resp.bytes().await?.to_vec())
     }
 }
 

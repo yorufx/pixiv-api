@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+const PIXIV_HOST: &str = "https://pixiv.net";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Illust {
     pub id: u64,
@@ -45,6 +47,14 @@ impl Illust {
             }]
         }
     }
+
+    pub fn preview_url(&self) -> Option<&str> {
+        self.image_urls.medium.as_deref()
+    }
+
+    pub fn url(&self) -> String {
+        format!("{}/artworks/{}", PIXIV_HOST, self.id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +68,12 @@ pub struct User {
     pub id: u64,
     pub account: String,
     pub name: String,
+}
+
+impl User {
+    pub fn url(&self) -> String {
+        format!("{}/users/{}", PIXIV_HOST, self.id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
