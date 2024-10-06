@@ -1,5 +1,6 @@
 use reqwest::{header::HeaderMap, Client};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{error::Result, PixivApi};
 
@@ -74,7 +75,7 @@ impl PixivApi {
         // Update client headers.
         let headers = Self::default_headers(inner.language.as_deref(), &resp.access_token);
         inner.client = Client::builder().default_headers(headers).build().unwrap();
-        println!("Refreshed token: {:#?}", resp);
+        info!("pixiv access token refreshed");
 
         // Save new tokens.
         inner

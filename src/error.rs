@@ -6,6 +6,8 @@ pub enum Error {
     Net(#[from] reqwest::Error),
     #[error(transparent)]
     Pixiv(#[from] PixivError),
+    #[error("invalid url")]
+    InvalidUrl(Option<String>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

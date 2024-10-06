@@ -59,11 +59,6 @@ impl PixivApi {
             })),
         }
     }
-
-    pub async fn download(&self, url: &str) -> Result<Vec<u8>> {
-        let resp = self.inner.read().await.client.get(url).send().await?;
-        Ok(resp.bytes().await?.to_vec())
-    }
 }
 
 #[async_trait]

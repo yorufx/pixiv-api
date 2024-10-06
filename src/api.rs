@@ -1,9 +1,11 @@
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{error::Result, model::Illust, Error, PixivApi};
 
 const API_V1_URL: &str = "https://app-api.pixiv.net/v1";
+const API_V2_URL: &str = "https://app-api.pixiv.net/v2";
 
 #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 #[error("{:?}", self)]
@@ -47,23 +49,36 @@ pub enum RankingMode {
     WeekR18G,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 struct IllustRankingRequest {
     mode: RankingMode,
     filter: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct IllustRankingResponse {
     illusts: Vec<Illust>,
+    #[expect(unused)]
     next_url: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize)]
+struct IllustFollwRequest {
+    restrict: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    offset: Option<u32>,
+}
+
+type IllustFollowResponse = IllustRankingResponse;
 
 impl IllustRankingRequest {
     fn new(mode: RankingMode) -> Self {
         Self {
             mode,
             filter: "for_ios",
+            offset: None,
         }
     }
 }
@@ -85,5 +100,31 @@ impl PixivApi {
 
         let resp: PixivResponse<IllustRankingResponse> = resp.json().await?;
         Ok(resp.ok()?.illusts)
+    }
+
+    pub async fn illust_follow(&self) -> Result<Vec<Illust>> {
+        let url = format!("{}/illust/follow", API_V2_URL);
+
+        let query = IllustFollwRequest {
+            restrict: "public",
+            offset: None,
+        };
+        let resp = self
+            .inner
+            .read()
+            .await
+            .client
+            .get(url)
+            .query(&query)
+            .send()
+            .await?;
+
+        let resp: PixivResponse<IllustFollowResponse> = resp.json().await?;
+        Ok(resp.ok()?.illusts)
+    }
+
+    pub async fn download(&self, url: &str) -> Result<Bytes> {
+        let resp = self.inner.read().await.client.get(url).send().await?;
+        Ok(resp.bytes().await?)
     }
 }

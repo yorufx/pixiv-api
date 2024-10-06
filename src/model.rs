@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::{Error, Result};
+
 const PIXIV_HOST: &str = "https://pixiv.net";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,8 +50,15 @@ impl Illust {
         }
     }
 
-    pub fn preview_url(&self) -> Option<&str> {
-        self.image_urls.medium.as_deref()
+    /// Returns url and filename
+    pub fn preview_url(&self) -> Result<(&str, &str)> {
+        let url = self.image_urls.medium.as_deref();
+        let url = url.ok_or(Error::InvalidUrl(None))?;
+
+        let filename = url.split("/").last();
+        let filename = filename.ok_or(Error::InvalidUrl(Some(url.to_string())))?;
+
+        Ok((url, filename))
     }
 
     pub fn url(&self) -> String {
