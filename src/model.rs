@@ -61,6 +61,22 @@ impl Illust {
         Ok((url, filename))
     }
 
+    /// Returns url and filename
+    pub fn original_urls(&self) -> Vec<(String, String)> {
+        let images = self.images();
+        let mut res = Vec::with_capacity(images.len());
+        for image in images {
+            if let Some(url) = image.original {
+                if let Some(filename) = url.split("/").last() {
+                    let filename = filename.to_string();
+                    res.push((url, filename));
+                }
+            }
+        }
+
+        res
+    }
+
     pub fn url(&self) -> String {
         format!("{}/artworks/{}", PIXIV_HOST, self.id)
     }
