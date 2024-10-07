@@ -60,7 +60,6 @@ struct IllustRankingRequest {
 #[derive(Debug, Clone, Deserialize)]
 struct IllustRankingResponse {
     illusts: Vec<Illust>,
-    #[expect(unused)]
     next_url: Option<String>,
 }
 
@@ -98,8 +97,21 @@ impl PixivApi {
             .send()
             .await?;
 
+        // Get 2 pages
         let resp: PixivResponse<IllustRankingResponse> = resp.json().await?;
-        Ok(resp.ok()?.illusts)
+        let resp = resp.ok()?;
+        let mut illusts = resp.illusts;
+        if let Some(next_url) = resp.next_url {
+            if let Ok(res) = self.inner.read().await.client.get(next_url).send().await {
+                if let Ok(resp) = res.json::<PixivResponse<IllustRankingResponse>>().await {
+                    if let Ok(mut resp) = resp.ok() {
+                        illusts.append(&mut resp.illusts);
+                    }
+                }
+            }
+        }
+
+        Ok(illusts)
     }
 
     pub async fn illust_follow(&self) -> Result<Vec<Illust>> {
