@@ -50,7 +50,7 @@ pub enum RankingMode {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct IllustRankingRequest {
+struct IllustRankingQuery {
     mode: RankingMode,
     filter: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,7 +64,7 @@ struct IllustRankingResponse {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct IllustFollwRequest {
+struct IllustFollowQuery {
     restrict: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     offset: Option<u32>,
@@ -72,7 +72,7 @@ struct IllustFollwRequest {
 
 type IllustFollowResponse = IllustRankingResponse;
 
-impl IllustRankingRequest {
+impl IllustRankingQuery {
     fn new(mode: RankingMode) -> Self {
         Self {
             mode,
@@ -82,11 +82,30 @@ impl IllustRankingRequest {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct IllustRecommendedQuery {
+    content_type: &'static str,
+    filter: &'static str,
+    include_ranking_label: bool,
+}
+
+impl IllustRecommendedQuery {
+    fn new() -> Self {
+        Self {
+            content_type: "illust",
+            filter: "for_ios",
+            include_ranking_label: true,
+        }
+    }
+}
+
+type IllustRecommendedResponse = IllustFollowResponse;
+
 impl PixivApi {
     pub async fn illust_ranking(&self, mode: RankingMode) -> Result<Vec<Illust>> {
         let url = format!("{}/illust/ranking", API_V1_URL);
 
-        let query = IllustRankingRequest::new(mode);
+        let query = IllustRankingQuery::new(mode);
         let resp = self
             .inner
             .read()
@@ -117,7 +136,7 @@ impl PixivApi {
     pub async fn illust_follow(&self) -> Result<Vec<Illust>> {
         let url = format!("{}/illust/follow", API_V2_URL);
 
-        let query = IllustFollwRequest {
+        let query = IllustFollowQuery {
             restrict: "public",
             offset: None,
         };
@@ -132,6 +151,24 @@ impl PixivApi {
             .await?;
 
         let resp: PixivResponse<IllustFollowResponse> = resp.json().await?;
+        Ok(resp.ok()?.illusts)
+    }
+
+    pub async fn illust_recommended(&self) -> Result<Vec<Illust>> {
+        let url = format!("{}/illust/recommended", API_V1_URL);
+
+        let query = IllustRecommendedQuery::new();
+        let resp = self
+            .inner
+            .read()
+            .await
+            .client
+            .get(url)
+            .query(&query)
+            .send()
+            .await?;
+
+        let resp: PixivResponse<IllustRecommendedResponse> = resp.json().await?;
         Ok(resp.ok()?.illusts)
     }
 
